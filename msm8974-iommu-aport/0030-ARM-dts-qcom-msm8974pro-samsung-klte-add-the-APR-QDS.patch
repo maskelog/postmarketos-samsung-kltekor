@@ -1,0 +1,100 @@
+From 3e23577981e3a0f50d65e0f963e98fb3307446a0 Mon Sep 17 00:00:00 2001
+From: hana <blitzmaske@gmail.com>
+Date: Thu, 24 Sep 2026 13:25:28 +0900
+Subject: [PATCH] ARM: dts: qcom: msm8974pro-samsung-klte: add the APR/QDSP6
+ services
+
+The ADSP firmware on klte exposes the apr_audio_svc SMD channel and
+answers AVCS_GET_VERSIONS with the core, AFE, ASM and ADM services
+(AVCS_CMD_GET_FWK_VERSION is unsupported, q6core falls back to the
+service list). Describe the APR bus and those services so the mainline
+q6core/q6afe/q6asm/q6adm drivers can bind.
+
+No sound card yet: the WCD9320 codec and SLIMbus controller are still
+missing, this only brings up the DSP side.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../qcom-msm8974pro-samsung-klte-common.dtsi  | 59 +++++++++++++++++++
+ 1 file changed, 59 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte-common.dtsi b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte-common.dtsi
+index 56a1a25f3..f3b9115f4 100644
+--- a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte-common.dtsi
++++ b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte-common.dtsi
+@@ -4,6 +4,8 @@
+ #include <dt-bindings/input/input.h>
+ #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+ #include <dt-bindings/leds/common.h>
++#include <dt-bindings/soc/qcom,apr.h>
++#include <dt-bindings/sound/qcom,q6asm.h>
+ 
+ / {
+ 	chassis-type = "handset";
+@@ -453,6 +455,63 @@ ramoops@3e8e0000 {
+ 
+ &remoteproc_adsp {
+ 	status = "okay";
++
++	smd-edge {
++		apr: apr {
++			compatible = "qcom,apr-v2";
++			qcom,smd-channels = "apr_audio_svc";
++			qcom,domain = <APR_DOMAIN_ADSP>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			q6core: service@3 {
++				compatible = "qcom,q6core";
++				reg = <APR_SVC_ADSP_CORE>;
++			};
++
++			q6afe: service@4 {
++				compatible = "qcom,q6afe";
++				reg = <APR_SVC_AFE>;
++
++				q6afedai: dais {
++					compatible = "qcom,q6afe-dais";
++					#address-cells = <1>;
++					#size-cells = <0>;
++					#sound-dai-cells = <1>;
++				};
++			};
++
++			q6asm: service@7 {
++				compatible = "qcom,q6asm";
++				reg = <APR_SVC_ASM>;
++
++				q6asmdai: dais {
++					compatible = "qcom,q6asm-dais";
++					#address-cells = <1>;
++					#size-cells = <0>;
++					#sound-dai-cells = <1>;
++
++					dai@0 {
++						reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
++					};
++
++					dai@1 {
++						reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
++					};
++				};
++			};
++
++			q6adm: service@8 {
++				compatible = "qcom,q6adm";
++				reg = <APR_SVC_ADM>;
++
++				q6routing: routing {
++					compatible = "qcom,q6adm-routing";
++					#sound-dai-cells = <0>;
++				};
++			};
++		};
++	};
+ };
+ 
+ &remoteproc_mss {
+-- 
+2.53.0
+

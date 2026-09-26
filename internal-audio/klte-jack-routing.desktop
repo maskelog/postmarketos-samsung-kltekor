@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Galaxy S5 headphone routing
+Exec=/home/user/.local/bin/klte-jack-routing
+OnlyShowIn=Phosh;GNOME;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,11 @@
+*.last-result.txt
+*.log
+*.tmp
+.pw*
+.env*
+known_hosts
+.diagnostic-tools/
+__pycache__/
+*.pyc
+references/
+source/

@@ -1,0 +1,89 @@
+From 273db858ec73cf34bf9c6695c75884fd3c62521a Mon Sep 17 00:00:00 2001
+From: hana <hana@local>
+Date: Wed, 23 Sep 2026 20:08:02 +0900
+Subject: [PATCH 25/27] 0016-arm-dts-msm8974-let-the-cpu-throttle (from
+ MahanHD/postmarketos-amami)
+
+---
+ arch/arm/boot/dts/qcom/qcom-msm8974.dtsi | 30 ++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi b/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
+index 60f481d6d..200474ff1 100644
+--- a/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
++++ b/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
+@@ -10,6 +10,7 @@
+ #include <dt-bindings/interrupt-controller/arm-gic.h>
+ #include <dt-bindings/power/qcom-rpmpd.h>
+ #include <dt-bindings/reset/qcom,gcc-msm8974.h>
++#include <dt-bindings/thermal/thermal.h>
+ 
+ / {
+ 	#address-cells = <1>;
+@@ -49,6 +50,7 @@ cpu0: cpu@0 {
+ 			clocks = <&kraitcc 0>;
+ 			clock-names = "cpu";
+ 			operating-points-v2 = <&cpu_opp_table>;
++			#cooling-cells = <2>;
+ 		};
+ 
+ 		cpu1: cpu@1 {
+@@ -2491,6 +2493,13 @@ cpu0-thermal {
+ 
+ 			thermal-sensors = <&tsens 5>;
+ 
++			cooling-maps {
++				map0 {
++					trip = <&cpu_alert0>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++
+ 			trips {
+ 				cpu_alert0: trip0 {
+ 					temperature = <75000>;
+@@ -2511,6 +2520,13 @@ cpu1-thermal {
+ 
+ 			thermal-sensors = <&tsens 6>;
+ 
++			cooling-maps {
++				map0 {
++					trip = <&cpu_alert1>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++
+ 			trips {
+ 				cpu_alert1: trip0 {
+ 					temperature = <75000>;
+@@ -2531,6 +2547,13 @@ cpu2-thermal {
+ 
+ 			thermal-sensors = <&tsens 7>;
+ 
++			cooling-maps {
++				map0 {
++					trip = <&cpu_alert2>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++
+ 			trips {
+ 				cpu_alert2: trip0 {
+ 					temperature = <75000>;
+@@ -2551,6 +2574,13 @@ cpu3-thermal {
+ 
+ 			thermal-sensors = <&tsens 8>;
+ 
++			cooling-maps {
++				map0 {
++					trip = <&cpu_alert3>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++
+ 			trips {
+ 				cpu_alert3: trip0 {
+ 					temperature = <75000>;
+-- 
+2.53.0
+

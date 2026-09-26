@@ -1,0 +1,139 @@
+maintainer="Luca Weiss <luca@lucaweiss.eu>"
+_flavor="postmarketos-qcom-msm8974"
+pkgname=linux-$_flavor
+pkgver=6.16.12
+pkgrel=14
+pkgdesc="Mainline Kernel fork for MSM8974 devices"
+arch="armv7"
+_carch="arm"
+url="https://github.com/msm8974-mainline/linux"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps
+	pmb:cross-native
+	pmb:kconfigcheck-community
+	"
+makedepends="
+	bison
+	clang
+	findutils
+	flex
+	lld
+	llvm
+	openssl-dev
+	perl
+	postmarketos-installkernel
+	python3
+	xz
+	zstd
+"
+
+_config="config-$_flavor.$arch"
+_tag="v${pkgver/_/-}-msm8974"
+
+# Source
+source="
+	https://github.com/msm8974-mainline/linux/archive/$_tag/linux-$_tag.tar.gz
+	$_config
+	0001-iommu-qcom-fix-device-leak-on-of_xlate.patch
+	0002-iommu-qcom-Simplify-with-scoped-for-each-OF-child-lo.patch
+	0003-iommu-qcom-Remove-sysfs-device-on-probe-failure-path.patch
+	0004-iommu-qcom-Fix-inverted-fault-report-check-in-qcom_i.patch
+	0005-iommu-qcom-Use-devm_pm_runtime_enable-in-qcom_iommu_.patch
+	0006-iommu-qcom-Check-pm_runtime_resume_and_get-return-in.patch
+	0007-iommu-qcom-Fix-pgtbl_ops-leak-in-qcom_iommu_init_dom.patch
+	0008-iommu-qcom-Publish-pgtbl_ops-before-releasing-init_m.patch
+	0009-iommu-qcom-Enable-clocks-before-hardware-access-in-q.patch
+	0010-iommu-arm-Remove-redundant-dev_err-dev_err_probe.patch
+	0011-iommu-arm-smmu-add-global-register-definitions-used-.patch
+	0012-iommu-qcom_iommu-extract-context-bank-programming-in.patch
+	0013-iommu-qcom_iommu-support-the-short-descriptor-pageta.patch
+	0014-iommu-qcom_iommu-handle-the-SMMU-global-register-spa.patch
+	0015-iommu-qcom_iommu-support-non-TZ-managed-instances.patch
+	0016-iommu-qcom_iommu-restore-context-bank-state-after-po.patch
+	0017-iommu-qcom_iommu-halt-the-micro-MMU-while-programmin.patch
+	0018-iommu-qcom_iommu-allow-faulting-transactions-to-term.patch
+	0019-iommu-qcom_iommu-program-BFP-prefetch-settings.patch
+	0020-iommu-qcom_iommu-add-the-MSM8974-instances.patch
+	0021-ARM-dts-qcom-msm8974-add-the-IOMMUs.patch
+	0022-drm-msm-detach-the-ARM-DMA-mapping-before-attaching-.patch
+	0023-0014-clk-qcom-hfpll-add-msm8974-data-from-MahanHD-po.patch
+	0024-0015-arm-dts-msm8974-wire-up-krait-cpufreq-from-Maha.patch
+	0025-0016-arm-dts-msm8974-let-the-cpu-throttle-from-Mahan.patch
+	0026-0022-arm-dts-msm8974-give-each-krait-its-own-cpufreq.patch
+	0027-ARM-dts-qcom-msm8974-allow-the-sub-960MHz-Krait-OPPs.patch
+	0028-ARM-dts-qcom-msm8974pro-samsung-klte-add-Krait-OPPs-.patch
+	0029-ARM-dts-qcom-msm8974pro-samsung-klte-hold-CX-at-NORM.patch
+	0030-ARM-dts-qcom-msm8974pro-samsung-klte-add-the-APR-QDS.patch
+	0031-clk-qcom-spmi-pmic-div-take-the-output-names-from-th.patch
+	0032-slimbus-qcom-ngd-start-the-controller-when-LPASS-is-.patch
+	0033-ASoC-codecs-add-the-WCD9320-Taiko-codec.patch
+	0034-ASoC-qcom-add-an-MSM8974-QDSP6-machine-driver.patch
+	0035-ARM-dts-qcom-msm8974pro-samsung-klte-add-WCD9320-aud.patch
+"
+builddir="$srcdir/linux-${_tag#v}"
+
+prepare() {
+	default_prepare
+	cp "$srcdir/config-$_flavor.$arch" .config
+}
+
+build() {
+	unset LDFLAGS
+	make ARCH="$_carch" LLVM=1 \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor"
+}
+
+package() {
+	mkdir -p "$pkgdir"/boot
+	make zinstall modules_install dtbs_install \
+		ARCH="$_carch" \
+		LLVM=1 \
+		INSTALL_PATH="$pkgdir"/boot/ \
+		INSTALL_MOD_PATH="$pkgdir"/usr \
+		INSTALL_MOD_STRIP=1 \
+		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
+	rm -f "$pkgdir"/lib/modules/*/build "$pkgdir"/lib/modules/*/source
+
+	install -D "$builddir"/include/config/kernel.release \
+		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+}
+
+sha512sums="
+6e67e6c86e36e235bad086ea2984c0885eb2e47264e667aa177df8ed7c29edbb23a866407dc59bdd39cfb95f6677e755a426eff485a93898c01997a6a6fcdd9c  linux-v6.16.12-msm8974.tar.gz
+d63d10a042b106ac829359e53993ba119bc111d4c9b7a7237f42450bfa0e84dc6bd0f1396ca88593bce1906c548fed500a21887f92cc4e037e62ba3a6e042abf  config-postmarketos-qcom-msm8974.armv7
+def8f3519337ca18ac7e5667b0f6e2d2fff10ab37884848491d10a4dbcac40edb79e09571a52e8e758e2b963f59370e1b5c1b621372dbaa59686be13c7a2132d  0001-iommu-qcom-fix-device-leak-on-of_xlate.patch
+d79c9a04d00b2846ca256a532baf7f343824ee15ba27396b2cae1685f3582e002d36a695c7266656204a4f247f8bf4dda7dab368d85e22be363d1da0e47cae5f  0002-iommu-qcom-Simplify-with-scoped-for-each-OF-child-lo.patch
+c0bf09ee992874417ee1a68546bbbe312c3a43048fcf1b3d029bee8d2ee8ce965433467ca2b6906b77063b8114693692aaa82695d2e48cce5cf15aecc6d442a6  0003-iommu-qcom-Remove-sysfs-device-on-probe-failure-path.patch
+bd91a74d629cc673e0ec1e66038cf5a5ef58de94eab60d3eca82acb091d1be55f30c86b4e4e2ee44c1a63d047347a738b9223d21ea22c7dbacf03ac10be85ac8  0004-iommu-qcom-Fix-inverted-fault-report-check-in-qcom_i.patch
+10b4b395c81aee2cf53b122bab5e2aaf3df0c9bec0a51fa09f836f1df3c5d40381ca96613d0dad7ef63ff1a3856b4f188861318831222bbca5973cdbc629eb2c  0005-iommu-qcom-Use-devm_pm_runtime_enable-in-qcom_iommu_.patch
+ab0b92f58493999b9ce5392ff3d501919dcf122baa0b86caebe26adfd1493e8e8d5cbcfe42d4820b2b3e20fbbc7a7dd6f45fad52018b050a380c42a22e0ce10d  0006-iommu-qcom-Check-pm_runtime_resume_and_get-return-in.patch
+bb927fc66bb0960dba1dcbb53348339db876a7027b96246ca8ec08a21e453364ae7a2d3add050070f56ef67fb3c4a59e37fae4a1a3d2d99797de5633db0452aa  0007-iommu-qcom-Fix-pgtbl_ops-leak-in-qcom_iommu_init_dom.patch
+d323090d27373ee3a334b00f308ca765fb2df79e960d4a868db04a7c77d0302708c7ef10b84750e093ecb4cb9fb7c19cdbdce200b1114b6f0841dea4900a29d9  0008-iommu-qcom-Publish-pgtbl_ops-before-releasing-init_m.patch
+57535f987d24828614c23f76003d2431939bf366f23ce80d2d88959dcce42b479a594bbde3cae1cf1dc33d6cdbf8f1f75f84166581a2392328048f76b7755876  0009-iommu-qcom-Enable-clocks-before-hardware-access-in-q.patch
+af653eb06b4130cb6a1672a8aa74bb0bea08cb24ebe6ee8c73bce2712e80ec4a7175e03fa2f6e4e76802bc7de89f55c5e7ccabcc83c78bb50dc346b0d5d3e6bd  0010-iommu-arm-Remove-redundant-dev_err-dev_err_probe.patch
+874be05caead9c0c831ad6cbebe4e2c3f6dbfd3416b0a99925f0b0e9ccc9a23050aa5f5392e8a2a25803ac3eb1751f378c807538fe5f1aeead14306f88c6c5cc  0011-iommu-arm-smmu-add-global-register-definitions-used-.patch
+b55adfe03bd02b7952ca1751ff6270e57a2a90b1ed12b1fe5c2c45412b15c6aa67fb3bc9eee208da18e38582f9c464a6e59855fd19f4df25e9be071123d4fae5  0012-iommu-qcom_iommu-extract-context-bank-programming-in.patch
+9353d81679ec9dd6cc5b3d21febae769911203e5e476fd5a5e8b2a0d29c65f9b0c5e9db233041141ff10b105f48ea19b4eda96383d3bab9803ec52576c01d34d  0013-iommu-qcom_iommu-support-the-short-descriptor-pageta.patch
+ad7d5f9051974ba5d616068e07b601abb83b88ec66c4fd3278bd8e0e51aa11fcdcf0530fc6286e9f89e23d6033870a2db6f470ee3cb71510534c21dc568ffd9f  0014-iommu-qcom_iommu-handle-the-SMMU-global-register-spa.patch
+b9c9a7fd99557cc07df5c5aa37b466625037440537acde267768a8c30d30eba456ee6f49c4ccfde6757f38f9fed5341a81f6c49a3ecd2c2abe6a9b5993d71820  0015-iommu-qcom_iommu-support-non-TZ-managed-instances.patch
+57c975ea874c1d68c0ee755d89cfc15ebe47379b13f7bc67bd4f38f4eecc3284d7805da03d1a276156459d116d4d539231a91f8292278043dd98d750f24df8d8  0016-iommu-qcom_iommu-restore-context-bank-state-after-po.patch
+9ee1eb0a94d644ad0ea6006b3d16b183c578e53185f15116d8e7aab395ff05fca70e761b1b3756b77dda7fd5d9e0f140dc8a9202a8bb22958c171a93b33dd0e8  0017-iommu-qcom_iommu-halt-the-micro-MMU-while-programmin.patch
+4231d39de21c7543af9618ec348c297970c7efec2fdf8aefe636643b38952a31df75c3fa0fd04ea2c4aa14408f9780f11925a2fe6ce398da74619aa6d9bc44d3  0018-iommu-qcom_iommu-allow-faulting-transactions-to-term.patch
+0d5f03e5c40f1ae0f2fd45d258261d24b31379f1e3581e183f72d2f07e5ffe6d551d1610c23e0b9b1c8cf1ac84b03d8b0f0992e950caae6823ce8f24673f2268  0019-iommu-qcom_iommu-program-BFP-prefetch-settings.patch
+2307006581852788f74ff446eee7893712915d7c49c84f51de83cf2d8abea2208ed479e53388fef2467deb5784172e6d36463d6ec86ae48d6417491bacee224c  0020-iommu-qcom_iommu-add-the-MSM8974-instances.patch
+12e469ec7e0a69b5f6d80e0bed81487aebc7a2170e1cd85951bdc14e7dd762935c2a2b5f6bf38f1fa34be980d1c82558083c6117b488d8db665b8682d1c1d1c0  0021-ARM-dts-qcom-msm8974-add-the-IOMMUs.patch
+d125cf05b8c86953081696af15b99253c9397378109fe4543b98bed30671af74b38b7d28298651843d4ef0c8e1c512b66c2056d5b3297a828f0aef68986868b2  0022-drm-msm-detach-the-ARM-DMA-mapping-before-attaching-.patch
+cb6ac76dd18fff2b588d19903260cabe17b57d059577c8b8612605cf31650a164098414f38c4118950ed273a5e2de38710c307d11b00916d9bcc81a9da4c445c  0023-0014-clk-qcom-hfpll-add-msm8974-data-from-MahanHD-po.patch
+d5e2dfcb081f35c9a573d3f655c3f249d881d8f638621a782da30bfb22cd55c1444b30433d7b6f00e4667e7432ba7bc3bddcbf0c3101a5b619c62c6b67991a39  0024-0015-arm-dts-msm8974-wire-up-krait-cpufreq-from-Maha.patch
+235278505393fc77da22d5024a16569aadd6d63856f4b34d906fd5aa235f3aaa4ef919374c165ad6e7534670602bcfd1fe7f56ec9f29857d17be75e2c244e892  0025-0016-arm-dts-msm8974-let-the-cpu-throttle-from-Mahan.patch
+a4f7b1fe023d69447fc9ecc0946fdaa2faaf22c0a443217151cf59973c9542ef688d2afba25f058751d5a32636ed7b5038e8e219f42e9d79f522abac4d31d52e  0026-0022-arm-dts-msm8974-give-each-krait-its-own-cpufreq.patch
+9956ee354f8ac8ca420fdfc867fc6d7d04909f515a788b7848071906e87d0d717b8879acbd4a9e18acf0ae49023cf2f274acb95996bbaab90073c0d9fc984d84  0027-ARM-dts-qcom-msm8974-allow-the-sub-960MHz-Krait-OPPs.patch
+1f56c5837e44841c4eb32ae26f4b94c35bf82d93abdf788a28b34e382a9465eaf62efa48062245168b119ff19fd725e41f25075ec712f7d6e70bc8cf4ec7ed7b  0028-ARM-dts-qcom-msm8974pro-samsung-klte-add-Krait-OPPs-.patch
+703b1037a744bba5803911e9088b1c2c6b709671c9485e92714b60fc7328e5637c631cd2ac1df9784a8b085db6ac934470432900fa7b7e157b816294244a5868  0029-ARM-dts-qcom-msm8974pro-samsung-klte-hold-CX-at-NORM.patch
+69c4328678d21dc378e1868be4978f7ba8822e14504612c681de652f177167a3d5a04725f8a903cbc7e6b9e6edd3a5f6c2ec98a26fc40046deac58e818306859  0030-ARM-dts-qcom-msm8974pro-samsung-klte-add-the-APR-QDS.patch
+04a6e10d13a813e38feab9c762007338004f65ce80cddf0d926c7cb3c2e2626cfa1c7245f88f12cf92b4516660628d56ffc19ae07f2e8117936b649d647aac33  0031-clk-qcom-spmi-pmic-div-take-the-output-names-from-th.patch
+4bdc492b0abfeefd8821702d36d3df341e456f0413f07716dcb1f2353ccf0a23c672e2bf1aae3450688e23701f1c5dcd93a0bec7ca9f0d3f55a1845e805b7e44  0032-slimbus-qcom-ngd-start-the-controller-when-LPASS-is-.patch
+d34a18cc31d23600fd2724b7d09880cb2b0df136e0ab12645ec6cb675ec28fe744b009f1677183a4452c2b3114f9be56760008c15c88ff656e135baaf44c1bc4  0033-ASoC-codecs-add-the-WCD9320-Taiko-codec.patch
+753ed6e1397ea54537758ac2c47cfa905e3a0b1ec45932761191082baf26a0e4a1be13a24d6da3040f8694995f96661a4e759266e41749b953720f6dd65b4be0  0034-ASoC-qcom-add-an-MSM8974-QDSP6-machine-driver.patch
+aeb91d6a0c8ed6ba6bdac6b8c10c85761906cefa73039104a0a448639721163257a29ef79b2fcbb20c4c2a78695fd0e62b4aa4d9a2bf62d3c576715a4c489eb7  0035-ARM-dts-qcom-msm8974pro-samsung-klte-add-WCD9320-aud.patch
+"

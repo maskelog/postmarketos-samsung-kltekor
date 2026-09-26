@@ -1,0 +1,38 @@
+From 955df27e9599ba9c3378060d4488e8f80e847b4c Mon Sep 17 00:00:00 2001
+From: Mukesh Ojha <mukesh.ojha@oss.qualcomm.com>
+Date: Fri, 17 Jul 2026 20:16:06 +0530
+Subject: [PATCH 07/21] iommu/qcom: Fix pgtbl_ops leak in
+ qcom_iommu_init_domain() error path
+
+alloc_io_pgtable_ops() can succeed and then qcom_scm_restore_sec_cfg()
+can fail for one of the context banks. The goto out_clear_iommu path
+only cleared qcom_domain->iommu; the locally allocated pgtbl_ops was
+never freed, leaking it permanently since qcom_domain->pgtbl_ops is only
+assigned on the success path.
+
+free_io_pgtable_ops() safely handles a NULL argument (covers the case
+where alloc_io_pgtable_ops() itself failed), so add it unconditionally in
+the out_clear_iommu handler.
+
+Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com>
+Signed-off-by: Mukesh Ojha <mukesh.ojha@oss.qualcomm.com>
+Signed-off-by: Will Deacon <will@kernel.org>
+---
+ drivers/iommu/arm/arm-smmu/qcom_iommu.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/iommu/arm/arm-smmu/qcom_iommu.c b/drivers/iommu/arm/arm-smmu/qcom_iommu.c
+index 8327b1aaf..d3b76c451 100644
+--- a/drivers/iommu/arm/arm-smmu/qcom_iommu.c
++++ b/drivers/iommu/arm/arm-smmu/qcom_iommu.c
+@@ -316,6 +316,7 @@ static int qcom_iommu_init_domain(struct iommu_domain *domain,
+ 	return 0;
+ 
+ out_clear_iommu:
++	free_io_pgtable_ops(pgtbl_ops);
+ 	qcom_domain->iommu = NULL;
+ out_unlock:
+ 	mutex_unlock(&qcom_domain->init_mutex);
+-- 
+2.53.0
+

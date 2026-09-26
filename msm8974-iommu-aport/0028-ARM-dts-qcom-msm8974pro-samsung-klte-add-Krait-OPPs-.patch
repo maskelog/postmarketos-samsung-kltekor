@@ -1,0 +1,63 @@
+From ba84c264a35d7c06e7f868c9b705f9eadf8075e9 Mon Sep 17 00:00:00 2001
+From: hana <hana@local>
+Date: Wed, 23 Sep 2026 20:50:31 +0900
+Subject: [PATCH] ARM: dts: qcom: msm8974pro-samsung-klte: add Krait OPPs up to
+ 1267.2MHz
+
+The bootloader leaves VDD_APC (PMA8084 S8 gang) at 0.900V with all
+cores in BHS mode, and nothing in this kernel changes it. Downstream's
+qcom,speed3-pvs2-bin-v1 table for this part needs 0.890V at 1267.2MHz,
+so the OPPs up to there run within the existing rail with 10mV of
+margin. Restricted to speed bin 3; only validated on a PVS 2 part.
+---
+ .../dts/qcom/qcom-msm8974pro-samsung-klte.dts | 37 +++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
+index 954665f3a..4842b6cbc 100644
+--- a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
++++ b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
+@@ -14,3 +14,40 @@ &i2c_led_gpio {
+ &i2c_led_gpioex_pins {
+ 	pins = "gpio120", "gpio121";
+ };
++
++/*
++ * Krait OPPs above the 960MHz the bootloader leaves the cores at, without
++ * touching the CPU rail. Nothing in this kernel drives VDD_APC (PMA8084 S8
++ * gang), and the bootloader leaves it at 0.900V with all four cores in
++ * pure BHS mode, so the cores see exactly that. Downstream's table for
++ * this part (qcom,speed3-pvs2-bin-v1) needs 0.890V at 1267.2MHz and
++ * 0.900V at 1344MHz; the ladder stops at 1267.2MHz to keep 10mV of
++ * margin. Only valid for speed bin 3 / PVS 2 - other PVS bins need more
++ * voltage at these rates - hence opp-supported-hw = bin 3 only and this
++ * living in the klte dts rather than the SoC dtsi.
++ */
++&cpu_opp_table {
++	opp-1036800000 {
++		opp-hz = /bits/ 64 <1036800000>;
++		opp-supported-hw = <0x8>;
++		clock-latency-ns = <100000>;
++	};
++
++	opp-1113600000 {
++		opp-hz = /bits/ 64 <1113600000>;
++		opp-supported-hw = <0x8>;
++		clock-latency-ns = <100000>;
++	};
++
++	opp-1190400000 {
++		opp-hz = /bits/ 64 <1190400000>;
++		opp-supported-hw = <0x8>;
++		clock-latency-ns = <100000>;
++	};
++
++	opp-1267200000 {
++		opp-hz = /bits/ 64 <1267200000>;
++		opp-supported-hw = <0x8>;
++		clock-latency-ns = <100000>;
++	};
++};
+-- 
+2.53.0
+

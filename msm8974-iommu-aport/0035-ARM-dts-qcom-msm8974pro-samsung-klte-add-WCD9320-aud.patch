@@ -1,0 +1,188 @@
+From ad1cd2f0c886a224e1d2d58a2142ce08e40651f4 Mon Sep 17 00:00:00 2001
+From: hana <blitzmaske@gmail.com>
+Date: Thu, 24 Sep 2026 15:21:43 +0900
+Subject: [PATCH 35/35] ARM: dts: qcom: msm8974pro-samsung-klte: add WCD9320
+ audio
+
+Describe the LPASS SLIMbus BAM and NGD (qcom,slim-ngd-v1.5.0, as the
+msm8974 sirius port does), the WCD9320 with klte's supplies (PMA8084 S5,
+S4, L1), its reset on tlmm gpio78 (SYS_RST_N per Samsung's klte gpiomux;
+the reference gpio63 is used for other things on this board) and its
+9.6 MHz MCLK from PMA8084 clock divider 1 on PMIC GPIO15 function 1, and a
+sound card routing MultiMedia1/2 through q6routing to SLIMBUS_0_RX ->
+wcd9320 rx1.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../qcom-msm8974pro-samsung-klte-common.dtsi  | 144 ++++++++++++++++++
+ 1 file changed, 144 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte-common.dtsi b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte-common.dtsi
+index f3b9115f4..36cbd5822 100644
+--- a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte-common.dtsi
++++ b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte-common.dtsi
+@@ -5,6 +5,7 @@
+ #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+ #include <dt-bindings/leds/common.h>
+ #include <dt-bindings/soc/qcom,apr.h>
++#include <dt-bindings/sound/qcom,q6afe.h>
+ #include <dt-bindings/sound/qcom,q6asm.h>
+ 
+ / {
+@@ -382,6 +383,21 @@ &mdss_dsi0_phy {
+ };
+ 
+ &pma8084_gpios {
++	/*
++	 * GPIO15 function 1 is the PMIC clock divider 1 output, wired to the
++	 * WCD9320 MCLK pin (Samsung klte: DIVCLK1, vin-sel 2 = S4 1.8 V,
++	 * CMOS, low drive).
++	 */
++	wcd_mclk_default: wcd-mclk-state {
++		pins = "gpio15";
++		function = "func1";
++		power-source = <PMA8084_GPIO_S4>;
++		drive-push-pull;
++		qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
++		bias-disable;
++		output-high;
++	};
++
+ 	gpio_keys_pin_a: gpio-keys-active-state {
+ 		pins = "gpio2", "gpio3", "gpio5";
+ 		function = "normal";
+@@ -885,3 +901,131 @@ &usb_hs1_phy {
+ 
+ 	qcom,init-seq = /bits/ 8 <0x1 0x64>;
+ };
++
++/*
++ * Audio: WCD9320 (Taiko) on the LPASS SLIMbus NGD, fed by the ADSP.
++ * SoC side (BAM + NGD) follows the Xperia Z2 (sirius) mainline port; klte
++ * wiring (supplies, reset, MCLK pin) from Samsung's msm8974pro-ac/sec
++ * device trees. Only the headphone playback path is wired up here.
++ */
++&{/soc} {
++	slimbam: dma-controller@fe104000 {
++		compatible = "qcom,bam-v1.4.0";
++		reg = <0xfe104000 0x20000>;
++		interrupts = <GIC_SPI 164 IRQ_TYPE_LEVEL_HIGH>;
++		#dma-cells = <1>;
++		qcom,ee = <1>;
++		qcom,num-ees = <2>;
++		num-channels = <31>;
++		qcom,controlled-remotely;
++	};
++
++	slim_msm: slim@fe12f000 {
++		compatible = "qcom,slim-ngd-v1.5.0";
++		reg = <0xfe12f000 0x35000>;
++		interrupts = <GIC_SPI 163 IRQ_TYPE_LEVEL_HIGH>;
++		dmas = <&slimbam 3>, <&slimbam 4>;
++		dma-names = "rx", "tx";
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		ngd@1 {
++			reg = <1>;
++			#address-cells = <2>;
++			#size-cells = <0>;
++
++			/* interface device: manufacturer 0x217, product 0xa0 */
++			wcd_ifd: ifd@0,0 {
++				compatible = "slim217,a0";
++				reg = <0 0>;
++			};
++
++			wcd9320: codec@1,0 {
++				compatible = "slim217,a0";
++				reg = <1 0>;
++
++				slim-ifc-dev = <&wcd_ifd>;
++
++				/*
++				 * SYS_RST_N is tlmm gpio78 on klte (Samsung's
++				 * board-8974-sec-k-gpiomux.c); the gpio63 in the
++				 * Qualcomm reference DT is the fingerprint LDO /
++				 * NFC firmware pin here.
++				 */
++				reset-gpios = <&tlmm 78 GPIO_ACTIVE_HIGH>;
++
++				clocks = <&pma8084_clk_divs 1>, <&xo_board>;
++				clock-names = "mclk", "slimbus";
++
++				pinctrl-names = "default";
++				pinctrl-0 = <&wcd_mclk_default>;
++
++				vdd-buck-supply = <&pma8084_s5>;
++				vdd-buck-sido-supply = <&pma8084_s5>;
++				vdd-tx-supply = <&pma8084_s4>;
++				vdd-rx-supply = <&pma8084_s4>;
++				vdd-io-supply = <&pma8084_l1>;
++
++				#sound-dai-cells = <1>;
++			};
++		};
++	};
++};
++
++/*
++ * PMA8084 clock dividers; divider 1 feeds the codec MCLK (9.6 MHz). Names
++ * are spelled out because the RPM clock controller already owns
++ * "div_clk1".."div_clk3".
++ */
++&pma8084_0 {
++	pma8084_clk_divs: clock-controller@5b00 {
++		compatible = "qcom,spmi-clkdiv";
++		reg = <0x5b00>;
++		#clock-cells = <1>;
++		qcom,num-clkdivs = <3>;
++		clocks = <&xo_board>;
++		clock-names = "xo";
++		clock-output-names = "pma8084_div_clk1", "pma8084_div_clk2",
++				     "pma8084_div_clk3";
++	};
++};
++
++/ {
++	sound {
++		compatible = "qcom,msm8974-sndcard";
++		model = "Samsung Galaxy S5";
++
++		mm1-dai-link {
++			link-name = "MultiMedia1";
++
++			cpu {
++				sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
++			};
++		};
++
++		mm2-dai-link {
++			link-name = "MultiMedia2";
++
++			cpu {
++				sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
++			};
++		};
++
++		slim-playback-dai-link {
++			link-name = "Slimbus Playback";
++
++			cpu {
++				sound-dai = <&q6afedai SLIMBUS_0_RX>;
++			};
++
++			platform {
++				sound-dai = <&q6routing>;
++			};
++
++			codec {
++				/* DAI 0 is wcd9320_rx1, stream "AIF1 Playback" */
++				sound-dai = <&wcd9320 0>;
++			};
++		};
++	};
++};
+-- 
+2.53.0
+

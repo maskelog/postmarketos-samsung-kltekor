@@ -1,0 +1,99 @@
+From b814b6ec0f10486c87daf89344283fdc376521f0 Mon Sep 17 00:00:00 2001
+From: hana <hana@local>
+Date: Wed, 23 Sep 2026 20:08:38 +0900
+Subject: [PATCH 27/27] ARM: dts: qcom: msm8974: allow the sub-960MHz Krait
+ OPPs on speed bin 3
+
+The MSM8974PRO-AC in the Samsung Galaxy S5 (klte) is fused speed bin 3,
+PVS 2, version 1. The OPP table only listed bins 0-2, so the cpufreq
+driver found no OPPs for this part. All OPPs are at or below the 960MHz
+the bootloader already runs the cores at, so they are safe on bin 3 too.
+---
+ arch/arm/boot/dts/qcom/qcom-msm8974.dtsi | 24 +++++++++++++++---------
+ 1 file changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi b/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
+index 8ae2045e9..dfc3d7707 100644
+--- a/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
++++ b/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
+@@ -131,6 +131,12 @@ kraitcc: clock-controller {
+ 	 * qcom,speed2-pvs4-bin-v0 wants 820000uV at 960MHz and this device has
+ 	 * booted at that rate, so everything here is covered. The rest of the
+ 	 * ladder up to 2.15GHz goes in once the rail is controllable.
++	 *
++	 * opp-supported-hw covers speed bins 0-3: the MSM8974PRO-AC in the
++	 * Galaxy S5 (klte) is fused speed bin 3 / PVS 2 / v1, and with only
++	 * bins 0-2 listed it ends up with no OPPs at all. Every rate here is
++	 * at or below the 960MHz the bootloader already runs these parts at,
++	 * so it is safe on either bin.
+ 	 */
+ 	cpu_opp_table: opp-table-cpu {
+ 		compatible = "operating-points-v2-krait-cpu";
+@@ -145,55 +151,55 @@ cpu_opp_table: opp-table-cpu {
+ 
+ 		opp-300000000 {
+ 			opp-hz = /bits/ 64 <300000000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 
+ 		opp-422400000 {
+ 			opp-hz = /bits/ 64 <422400000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 
+ 		opp-499200000 {
+ 			opp-hz = /bits/ 64 <499200000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 
+ 		opp-576000000 {
+ 			opp-hz = /bits/ 64 <576000000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 
+ 		opp-652800000 {
+ 			opp-hz = /bits/ 64 <652800000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 
+ 		opp-729600000 {
+ 			opp-hz = /bits/ 64 <729600000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 
+ 		opp-806400000 {
+ 			opp-hz = /bits/ 64 <806400000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 
+ 		opp-883200000 {
+ 			opp-hz = /bits/ 64 <883200000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 
+ 		opp-960000000 {
+ 			opp-hz = /bits/ 64 <960000000>;
+-			opp-supported-hw = <0x7>;
++			opp-supported-hw = <0xf>;
+ 			clock-latency-ns = <100000>;
+ 		};
+ 	};
+-- 
+2.53.0
+

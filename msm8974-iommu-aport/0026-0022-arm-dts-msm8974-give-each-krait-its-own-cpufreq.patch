@@ -1,0 +1,84 @@
+From 62b8516a283428880c4aac5d4a1ad3823edb78e7 Mon Sep 17 00:00:00 2001
+From: hana <hana@local>
+Date: Wed, 23 Sep 2026 20:08:02 +0900
+Subject: [PATCH 26/27] 
+ 0022-arm-dts-msm8974-give-each-krait-its-own-cpufreq-policy (from
+ MahanHD/postmarketos-amami)
+
+---
+ arch/arm/boot/dts/qcom/qcom-msm8974.dtsi | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi b/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
+index 200474ff1..8ae2045e9 100644
+--- a/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
++++ b/arch/arm/boot/dts/qcom/qcom-msm8974.dtsi
+@@ -65,6 +65,7 @@ cpu1: cpu@1 {
+ 			clocks = <&kraitcc 1>;
+ 			clock-names = "cpu";
+ 			operating-points-v2 = <&cpu_opp_table>;
++			#cooling-cells = <2>;
+ 		};
+ 
+ 		cpu2: cpu@2 {
+@@ -79,6 +80,7 @@ cpu2: cpu@2 {
+ 			clocks = <&kraitcc 2>;
+ 			clock-names = "cpu";
+ 			operating-points-v2 = <&cpu_opp_table>;
++			#cooling-cells = <2>;
+ 		};
+ 
+ 		cpu3: cpu@3 {
+@@ -93,6 +95,7 @@ cpu3: cpu@3 {
+ 			clocks = <&kraitcc 3>;
+ 			clock-names = "cpu";
+ 			operating-points-v2 = <&cpu_opp_table>;
++			#cooling-cells = <2>;
+ 		};
+ 
+ 		l2: l2-cache {
+@@ -131,7 +134,13 @@ kraitcc: clock-controller {
+ 	 */
+ 	cpu_opp_table: opp-table-cpu {
+ 		compatible = "operating-points-v2-krait-cpu";
+-		opp-shared;
++		/*
++		 * Deliberately not "opp-shared". Each Krait has its own mux and
++		 * HFPLL, and with one shared policy every transition reprograms
++		 * all four - including cores that are power-collapsed at that
++		 * instant, which wedges them. One policy per CPU keeps a core's
++		 * clock changing only when that core is the one asking.
++		 */
+ 		nvmem-cells = <&speedbin_efuse>;
+ 
+ 		opp-300000000 {
+@@ -2523,7 +2532,7 @@ cpu1-thermal {
+ 			cooling-maps {
+ 				map0 {
+ 					trip = <&cpu_alert1>;
+-					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++					cooling-device = <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+ 				};
+ 			};
+ 
+@@ -2550,7 +2559,7 @@ cpu2-thermal {
+ 			cooling-maps {
+ 				map0 {
+ 					trip = <&cpu_alert2>;
+-					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++					cooling-device = <&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+ 				};
+ 			};
+ 
+@@ -2577,7 +2586,7 @@ cpu3-thermal {
+ 			cooling-maps {
+ 				map0 {
+ 					trip = <&cpu_alert3>;
+-					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++					cooling-device = <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+ 				};
+ 			};
+ 
+-- 
+2.53.0
+

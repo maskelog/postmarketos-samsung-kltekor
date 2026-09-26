@@ -1,0 +1,55 @@
+From 8e7b8c21835146349315f62f31e004b90d594b88 Mon Sep 17 00:00:00 2001
+From: hana <hana@local>
+Date: Wed, 23 Sep 2026 21:50:36 +0900
+Subject: [PATCH] ARM: dts: qcom: msm8974pro-samsung-klte: hold CX at NORMAL
+ for the CPU HFPLLs
+
+Downstream's clock-krait-8974 has each CPU HFPLL vote the CX rail:
+SVS_SOC up to 998.4MHz and NORMAL up to 1996.8MHz. Nothing in mainline
+makes that vote, so with OPPs above 998.4MHz the HFPLLs run at whatever
+CX level other RPM masters happen to hold. The first boot with those
+OPPs hung once, intermittently. Attach the CPU HFPLLs to VDDCX with a
+NORMAL required-opp so the level is held while they are bound.
+---
+ .../dts/qcom/qcom-msm8974pro-samsung-klte.dts | 28 +++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
+index 4842b6cbc..d287b3dda 100644
+--- a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
++++ b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
+@@ -51,3 +51,31 @@ opp-1267200000 {
+ 		clock-latency-ns = <100000>;
+ 	};
+ };
++
++/*
++ * Downstream (clock-krait-8974.c, hfpll_fmax) has each CPU HFPLL vote the
++ * CX rail: SVS_SOC up to 998.4MHz, NORMAL up to 1996.8MHz. Nothing here
++ * makes that vote, so above 998.4MHz the HFPLLs would run on whatever CX
++ * level the other RPM masters happen to hold - the likely cause of an
++ * intermittent hang on the first boot with the OPPs above. Hold CX at
++ * NORMAL for as long as the CPU HFPLLs are bound.
++ */
++&hfpll0 {
++	power-domains = <&rpmpd MSM8974_VDDCX>;
++	required-opps = <&rpmpd_opp_nom>;
++};
++
++&hfpll1 {
++	power-domains = <&rpmpd MSM8974_VDDCX>;
++	required-opps = <&rpmpd_opp_nom>;
++};
++
++&hfpll2 {
++	power-domains = <&rpmpd MSM8974_VDDCX>;
++	required-opps = <&rpmpd_opp_nom>;
++};
++
++&hfpll3 {
++	power-domains = <&rpmpd MSM8974_VDDCX>;
++	required-opps = <&rpmpd_opp_nom>;
++};
+-- 
+2.53.0
+
