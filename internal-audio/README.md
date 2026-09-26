@@ -6,6 +6,8 @@ module-switch-on-port-available at startup; klte-jack-routing.sh restores
 it after callaudiod initialization through a user autostart entry.
 See the root README for installation. Historical notes below retain earlier
 observations; raw logs, source caches and reference clones are not published.
+One-off diagnostic/test scripts have been removed; their names below are
+historical references, not current installation or verification instructions.
 
 # Galaxy S5 (klte) internal audio on mainline — status and record
 
