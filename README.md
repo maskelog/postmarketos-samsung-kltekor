@@ -7,12 +7,14 @@ upstream `samsung-klte` / MSM8974 구성을 기반으로 합니다.
 
 ## 확인된 상태
 
-- Linux 6.16.12 r14, 커널 빌드 #15
+- Linux 6.16.12 r16, 커널 빌드 #17
 - 내장 스피커와 3.5 mm 이어폰 재생
 - WCD9320 MBHC 기반 이어폰 삽입·제거 감지
 - 삽입 시 이어폰, 제거 시 스피커 자동 전환
 - 재부팅 후 출력 정상 동작: 사용자 확인
 - IOMMU와 Krait CPU 주파수 관련 패치 및 실험 기록 포함
+- IR 송신기(IR blaster): `/dev/lirc0`, 삼성 TV 전원 켜기 실기기 확인 → [ir-remote/README.md](ir-remote/README.md)
+- 장시간 사용 시 Phosh가 죽던 문제 수정: SLIMbus NGD의 DMA 버퍼 누수로 vmalloc 영역이 약 1.5시간 만에 고갈되던 현상 (패치 0036, [phosh-death/NOTES.md](phosh-death/NOTES.md))
 
 마이크, 헤드셋 버튼, 통화 라우팅은 검증되지 않았습니다.
 오디오 상세 기록은 [internal-audio/NOTES.md](internal-audio/NOTES.md)에 있습니다.
@@ -23,8 +25,10 @@ NOTES의 마지막 기록을 기준으로 확인하세요.
 
 | 경로 | 내용 |
 | --- | --- |
-| `msm8974-iommu-aport/` | APKBUILD, 커널 설정, 패치 0001–0035 |
-| `kernel-pkgs/` | 실기기에서 사용한 r14 APK와 SHA-256 |
+| `msm8974-iommu-aport/` | APKBUILD, 커널 설정, 패치 0001–0038 |
+| `kernel-pkgs/` | 실기기에서 사용한 r16 APK와 SHA-256 |
+| `ir-remote/` | IR 송신기 작동 방식, udev 규칙, 삼성 TV 신호 예제 |
+| `phosh-death/` | 장시간 사용 시 세션 종료 원인 분석 |
 | `internal-audio/ucm2/` | 최신 ALSA UCM 설정 |
 | `internal-audio/klte-jack-routing.sh` | 로그인 시 잭 자동 전환 복구 |
 | `gpu-lockup/`, `krait-research-*/` | 조사 및 실험 자료 |

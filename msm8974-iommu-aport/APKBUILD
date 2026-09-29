@@ -2,7 +2,7 @@ maintainer="Luca Weiss <luca@lucaweiss.eu>"
 _flavor="postmarketos-qcom-msm8974"
 pkgname=linux-$_flavor
 pkgver=6.16.12
-pkgrel=14
+pkgrel=16
 pkgdesc="Mainline Kernel fork for MSM8974 devices"
 arch="armv7"
 _carch="arm"
@@ -69,6 +69,9 @@ source="
 	0033-ASoC-codecs-add-the-WCD9320-Taiko-codec.patch
 	0034-ASoC-qcom-add-an-MSM8974-QDSP6-machine-driver.patch
 	0035-ARM-dts-qcom-msm8974pro-samsung-klte-add-WCD9320-aud.patch
+	0036-slimbus-qcom-ngd-free-the-message-queue-buffers-in-exit_dma.patch
+	0037-media-rc-add-the-Samsung-Galaxy-S5-iCE40-IR-transmit.patch
+	0038-ARM-dts-qcom-msm8974pro-samsung-klte-add-the-iCE40-I.patch
 "
 builddir="$srcdir/linux-${_tag#v}"
 
@@ -100,7 +103,7 @@ package() {
 
 sha512sums="
 6e67e6c86e36e235bad086ea2984c0885eb2e47264e667aa177df8ed7c29edbb23a866407dc59bdd39cfb95f6677e755a426eff485a93898c01997a6a6fcdd9c  linux-v6.16.12-msm8974.tar.gz
-d63d10a042b106ac829359e53993ba119bc111d4c9b7a7237f42450bfa0e84dc6bd0f1396ca88593bce1906c548fed500a21887f92cc4e037e62ba3a6e042abf  config-postmarketos-qcom-msm8974.armv7
+cddf1785f649a6337eb34d04c2f2c8e8aeb49f6ef79d98a4d3b25b6ee6a889b940792b596e4259431de974046742dd8c03512838b05640f71b5a59a1a612c150  config-postmarketos-qcom-msm8974.armv7
 def8f3519337ca18ac7e5667b0f6e2d2fff10ab37884848491d10a4dbcac40edb79e09571a52e8e758e2b963f59370e1b5c1b621372dbaa59686be13c7a2132d  0001-iommu-qcom-fix-device-leak-on-of_xlate.patch
 d79c9a04d00b2846ca256a532baf7f343824ee15ba27396b2cae1685f3582e002d36a695c7266656204a4f247f8bf4dda7dab368d85e22be363d1da0e47cae5f  0002-iommu-qcom-Simplify-with-scoped-for-each-OF-child-lo.patch
 c0bf09ee992874417ee1a68546bbbe312c3a43048fcf1b3d029bee8d2ee8ce965433467ca2b6906b77063b8114693692aaa82695d2e48cce5cf15aecc6d442a6  0003-iommu-qcom-Remove-sysfs-device-on-probe-failure-path.patch
@@ -136,4 +139,7 @@ a4f7b1fe023d69447fc9ecc0946fdaa2faaf22c0a443217151cf59973c9542ef688d2afba25f0587
 d34a18cc31d23600fd2724b7d09880cb2b0df136e0ab12645ec6cb675ec28fe744b009f1677183a4452c2b3114f9be56760008c15c88ff656e135baaf44c1bc4  0033-ASoC-codecs-add-the-WCD9320-Taiko-codec.patch
 753ed6e1397ea54537758ac2c47cfa905e3a0b1ec45932761191082baf26a0e4a1be13a24d6da3040f8694995f96661a4e759266e41749b953720f6dd65b4be0  0034-ASoC-qcom-add-an-MSM8974-QDSP6-machine-driver.patch
 aeb91d6a0c8ed6ba6bdac6b8c10c85761906cefa73039104a0a448639721163257a29ef79b2fcbb20c4c2a78695fd0e62b4aa4d9a2bf62d3c576715a4c489eb7  0035-ARM-dts-qcom-msm8974pro-samsung-klte-add-WCD9320-aud.patch
+65d273b7e404dd6a6e26dda0e2afca02801f49de7f63bba6a90c7dec927c360767663b40c8adc0501c6e7920c37a26cd48f36c7be2cd36ef4251760e9d1b2e59  0036-slimbus-qcom-ngd-free-the-message-queue-buffers-in-exit_dma.patch
+56b0b787d3b3bd6dc5b80a3f655fca603d0a24b3a475a03c04cdb934be99a314f0f4820416ce25a114020f0927549822e9b80d5aec33f68cac96eafebde2dae4  0037-media-rc-add-the-Samsung-Galaxy-S5-iCE40-IR-transmit.patch
+99dc65772387a359a768f4e678092123a7f71a402cf9c704f44d45cdd380a782e750a80f731872c5139afe024e84eae03aaf98921be2b74842133ed7ffb1fa27  0038-ARM-dts-qcom-msm8974pro-samsung-klte-add-the-iCE40-I.patch
 "

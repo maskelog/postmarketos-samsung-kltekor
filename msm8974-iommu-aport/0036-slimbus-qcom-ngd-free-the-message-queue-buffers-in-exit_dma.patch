@@ -1,0 +1,65 @@
+From: postmarketOS klte experiment <noreply@localhost>
+Date: Sun, 27 Sep 2026 09:30:00 +0900
+Subject: [PATCH] slimbus: qcom-ngd: free the message queue buffers in
+ exit_dma
+
+qcom_slim_ngd_init_dma() allocates the RX and TX message queue buffers
+with dma_alloc_coherent() every time the NGD is set up, i.e. on every
+runtime resume, but qcom_slim_ngd_exit_dma() only releases the DMA
+channels and never frees the buffers.
+
+With a 100 ms autosuspend delay any periodic SLIMbus register access
+(e.g. a codec jack poll every 500 ms) cycles the controller through
+suspend/resume continuously and leaks two coherent buffers per cycle.
+On ARM32 each one is remapped into the 240 MiB vmalloc area, which is
+exhausted after about 1.5 hours: kernel stack allocation in fork()
+fails and userspace (the whole Phosh session) dies.
+
+Free both buffers in qcom_slim_ngd_exit_dma() and clear the pointers,
+also on the RX post error path so they are never freed twice.
+
+---
+ drivers/slimbus/qcom-ngd-ctrl.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/slimbus/qcom-ngd-ctrl.c b/drivers/slimbus/qcom-ngd-ctrl.c
+--- a/drivers/slimbus/qcom-ngd-ctrl.c
++++ b/drivers/slimbus/qcom-ngd-ctrl.c
+@@ -702,6 +702,7 @@
+
+ rx_post_err:
+ 	dma_free_coherent(dev, size, ctrl->rx_base, ctrl->rx_phys_base);
++	ctrl->rx_base = NULL;
+ rel_rx:
+ 	dma_release_channel(ctrl->dma_rx_channel);
+ 	return ret;
+@@ -1131,6 +1132,8 @@
+
+ static int qcom_slim_ngd_exit_dma(struct qcom_slim_ngd_ctrl *ctrl)
+ {
++	struct device *dev = ctrl->dev;
++
+ 	if (ctrl->dma_rx_channel) {
+ 		dmaengine_terminate_sync(ctrl->dma_rx_channel);
+ 		dma_release_channel(ctrl->dma_rx_channel);
+@@ -1143,6 +1146,18 @@
+
+ 	ctrl->dma_tx_channel = ctrl->dma_rx_channel = NULL;
+
++	if (ctrl->rx_base) {
++		dma_free_coherent(dev, QCOM_SLIM_NGD_DESC_NUM * SLIM_MSGQ_BUF_LEN,
++				  ctrl->rx_base, ctrl->rx_phys_base);
++		ctrl->rx_base = NULL;
++	}
++
++	if (ctrl->tx_base) {
++		dma_free_coherent(dev, (QCOM_SLIM_NGD_DESC_NUM + 1) * SLIM_MSGQ_BUF_LEN,
++				  ctrl->tx_base, ctrl->tx_phys_base);
++		ctrl->tx_base = NULL;
++	}
++
+ 	return 0;
+ }
+
+--
+2.49.0

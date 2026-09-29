@@ -1,0 +1,467 @@
+From 84044cd7d4d96c3151a8656a4f1b59c115a81f34 Mon Sep 17 00:00:00 2001
+From: postmarketOS klte experiment <noreply@localhost>
+Date: Sun, 27 Sep 2026 19:41:33 +0900
+Subject: [PATCH 37/38] media: rc: add the Samsung Galaxy S5 iCE40 IR
+ transmitter
+
+The IR blaster of the Galaxy S5 (klte) is an IR LED driven by a Lattice
+iCE40 FPGA. The FPGA is configured at probe time by shifting its
+bitstream in over two GPIOs; the same lines are then used as a
+bit-banged I2C bus to hand the FPGA a carrier frequency and a list of
+pulse/space lengths in carrier cycles. A status GPIO reports that the
+packet checksum was accepted (low) and that the emission finished (high).
+
+Protocol and sequencing follow Samsung's downstream
+drivers/misc/ice40xx.c. The device is exposed as a raw LIRC
+transmitter, so ir-ctl and friends work unchanged.
+---
+ drivers/media/rc/Kconfig            |  13 +
+ drivers/media/rc/Makefile           |   1 +
+ drivers/media/rc/ir-ice40-samsung.c | 399 ++++++++++++++++++++++++++++
+ 3 files changed, 413 insertions(+)
+ create mode 100644 drivers/media/rc/ir-ice40-samsung.c
+
+diff --git a/drivers/media/rc/Kconfig b/drivers/media/rc/Kconfig
+index 0a8aeaf..b80272c 100644
+--- a/drivers/media/rc/Kconfig
++++ b/drivers/media/rc/Kconfig
+@@ -202,6 +202,19 @@ config IR_HIX5HD2
+ 
+ 	   If you're not sure, select N here
+ 
++config IR_ICE40_SAMSUNG
++	tristate "Samsung Galaxy S5 iCE40 FPGA IR transmitter"
++	depends on LIRC
++	depends on OF && GPIOLIB && COMMON_CLK
++	select FW_LOADER
++	help
++	  Say Y or M here to use the IR blaster of the Samsung Galaxy S5
++	  (klte). The IR LED is driven by a Lattice iCE40 FPGA which is
++	  configured with a bitstream at probe time.
++
++	  To compile this driver as a module, choose M here: the module will
++	  be called ir-ice40-samsung.
++
+ config IR_IGORPLUGUSB
+ 	tristate "IgorPlug-USB IR Receiver"
+ 	depends on USB
+diff --git a/drivers/media/rc/Makefile b/drivers/media/rc/Makefile
+index 2bca6f7..596ea78 100644
+--- a/drivers/media/rc/Makefile
++++ b/drivers/media/rc/Makefile
+@@ -30,6 +30,7 @@ obj-$(CONFIG_IR_FINTEK) += fintek-cir.o
+ obj-$(CONFIG_IR_GPIO_CIR) += gpio-ir-recv.o
+ obj-$(CONFIG_IR_GPIO_TX) += gpio-ir-tx.o
+ obj-$(CONFIG_IR_HIX5HD2) += ir-hix5hd2.o
++obj-$(CONFIG_IR_ICE40_SAMSUNG) += ir-ice40-samsung.o
+ obj-$(CONFIG_IR_IGORPLUGUSB) += igorplugusb.o
+ obj-$(CONFIG_IR_IGUANA) += iguanair.o
+ obj-$(CONFIG_IR_IMG) += img-ir/
+diff --git a/drivers/media/rc/ir-ice40-samsung.c b/drivers/media/rc/ir-ice40-samsung.c
+new file mode 100644
+index 0000000..59ada91
+--- /dev/null
++++ b/drivers/media/rc/ir-ice40-samsung.c
+@@ -0,0 +1,399 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * IR transmitter behind the Lattice iCE40 FPGA on Samsung Galaxy S5 (klte).
++ *
++ * The FPGA is SRAM based: at probe its configuration bitstream is shifted in
++ * over two GPIOs (SPI slave mode, CRESET_B toggled first). Afterwards the same
++ * two lines are an I2C bus to the FPGA (address 0x50), which takes a carrier
++ * frequency plus a list of pulse/space lengths in carrier cycles and drives
++ * the IR LED itself. A status GPIO reports checksum OK (low) and end of
++ * emission (high again). Protocol taken from Samsung's downstream
++ * drivers/misc/ice40xx.c.
++ */
++
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <linux/firmware.h>
++#include <linux/gpio/consumer.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/regulator/consumer.h>
++#include <media/rc-core.h>
++
++#define ICE40_IR_I2C_ADDR	0x50
++#define ICE40_IR_MAX_BUF	4096
++#define ICE40_IR_HDR_LEN	5	/* len msb/lsb, operation, freq msb/lsb */
++#define ICE40_IR_OP_SINGLE	0
++#define ICE40_IR_DEFAULT_CARRIER 38000
++#define ICE40_IR_I2C_DELAY_US	2
++
++struct ice40_ir {
++	struct device *dev;
++	struct rc_dev *rc;
++	struct clk *clk;
++	struct regulator *vled;
++	struct gpio_desc *scl;		/* SPI clock while configuring */
++	struct gpio_desc *sda;		/* SPI data while configuring */
++	struct gpio_desc *creset;
++	struct gpio_desc *enable;
++	struct gpio_desc *ack;
++	struct mutex lock;
++	u32 carrier;
++	bool configured;
++	u8 buf[ICE40_IR_MAX_BUF + 1];
++};
++
++/* ---- bit-banged I2C (open drain emulated: release = input) ---- */
++
++static void ice40_sda(struct ice40_ir *ir, int v)
++{
++	if (v)
++		gpiod_direction_input(ir->sda);
++	else
++		gpiod_direction_output(ir->sda, 0);
++	udelay(ICE40_IR_I2C_DELAY_US);
++}
++
++static void ice40_scl(struct ice40_ir *ir, int v)
++{
++	if (v)
++		gpiod_direction_input(ir->scl);
++	else
++		gpiod_direction_output(ir->scl, 0);
++	udelay(ICE40_IR_I2C_DELAY_US);
++}
++
++static void ice40_i2c_start(struct ice40_ir *ir)
++{
++	ice40_sda(ir, 1);
++	ice40_scl(ir, 1);
++	ice40_sda(ir, 0);
++	ice40_scl(ir, 0);
++}
++
++static void ice40_i2c_stop(struct ice40_ir *ir)
++{
++	ice40_sda(ir, 0);
++	ice40_scl(ir, 1);
++	ice40_sda(ir, 1);
++}
++
++/* returns 0 on ACK */
++static int ice40_i2c_write_byte(struct ice40_ir *ir, u8 b)
++{
++	int i, nack;
++
++	for (i = 7; i >= 0; i--) {
++		ice40_sda(ir, (b >> i) & 1);
++		ice40_scl(ir, 1);
++		ice40_scl(ir, 0);
++	}
++	ice40_sda(ir, 1);
++	ice40_scl(ir, 1);
++	nack = gpiod_get_value(ir->sda);
++	ice40_scl(ir, 0);
++
++	return nack ? -EIO : 0;
++}
++
++static u8 ice40_i2c_read_byte(struct ice40_ir *ir, bool ack)
++{
++	u8 b = 0;
++	int i;
++
++	ice40_sda(ir, 1);
++	for (i = 0; i < 8; i++) {
++		ice40_scl(ir, 1);
++		b = (b << 1) | !!gpiod_get_value(ir->sda);
++		ice40_scl(ir, 0);
++	}
++	ice40_sda(ir, !ack);
++	ice40_scl(ir, 1);
++	ice40_scl(ir, 0);
++	ice40_sda(ir, 1);
++
++	return b;
++}
++
++static int ice40_i2c_write(struct ice40_ir *ir, const u8 *data, int len)
++{
++	int i, ret;
++
++	ice40_i2c_start(ir);
++	ret = ice40_i2c_write_byte(ir, ICE40_IR_I2C_ADDR << 1);
++	for (i = 0; !ret && i < len; i++)
++		ret = ice40_i2c_write_byte(ir, data[i]);
++	ice40_i2c_stop(ir);
++
++	return ret;
++}
++
++static int ice40_i2c_read(struct ice40_ir *ir, u8 *data, int len)
++{
++	int i, ret;
++
++	ice40_i2c_start(ir);
++	ret = ice40_i2c_write_byte(ir, (ICE40_IR_I2C_ADDR << 1) | 1);
++	for (i = 0; !ret && i < len; i++)
++		data[i] = ice40_i2c_read_byte(ir, i < len - 1);
++	ice40_i2c_stop(ir);
++
++	return ret;
++}
++
++/* ---- FPGA power / configuration ---- */
++
++static int ice40_ir_on(struct ice40_ir *ir)
++{
++	int ret;
++
++	ret = clk_prepare_enable(ir->clk);
++	if (ret)
++		return ret;
++	gpiod_set_value_cansleep(ir->enable, 1);
++	usleep_range(1000, 2000);
++
++	return 0;
++}
++
++static void ice40_ir_off(struct ice40_ir *ir)
++{
++	usleep_range(2000, 2500);
++	gpiod_set_value_cansleep(ir->enable, 0);
++	clk_disable_unprepare(ir->clk);
++}
++
++static int ice40_ir_configure(struct ice40_ir *ir, const struct firmware *fw)
++{
++	size_t i;
++	int bit, ret;
++
++	ret = clk_prepare_enable(ir->clk);
++	if (ret)
++		return ret;
++
++	gpiod_direction_output(ir->scl, 1);
++	gpiod_direction_output(ir->sda, 1);
++
++	gpiod_set_value_cansleep(ir->enable, 1);
++	usleep_range(30, 50);
++	gpiod_set_value_cansleep(ir->creset, 0);
++	usleep_range(30, 50);
++	gpiod_set_value_cansleep(ir->creset, 1);
++	usleep_range(1000, 1300);
++
++	for (i = 0; i < fw->size; i++) {
++		u8 b = fw->data[i];
++
++		for (bit = 7; bit >= 0; bit--) {
++			gpiod_set_value(ir->scl, 0);
++			gpiod_set_value(ir->sda, (b >> bit) & 1);
++			gpiod_set_value(ir->scl, 1);
++		}
++	}
++
++	/* extra clocks with data high to finish the configuration */
++	gpiod_set_value(ir->sda, 1);
++	for (i = 0; i < 200; i++) {
++		gpiod_set_value(ir->scl, 0);
++		gpiod_set_value(ir->scl, 1);
++	}
++	usleep_range(50, 70);
++
++	/* release the lines: they are the I2C bus from now on */
++	gpiod_direction_input(ir->sda);
++	gpiod_direction_input(ir->scl);
++
++	gpiod_set_value_cansleep(ir->enable, 0);
++	clk_disable_unprepare(ir->clk);
++	usleep_range(10000, 12000);
++
++	return 0;
++}
++
++/* ---- rc-core ---- */
++
++static int ice40_ir_set_carrier(struct rc_dev *rc, u32 carrier)
++{
++	struct ice40_ir *ir = rc->priv;
++
++	if (carrier < 15000 || carrier > 65535)
++		return -EINVAL;
++
++	ir->carrier = carrier;
++
++	return 0;
++}
++
++static int ice40_ir_tx(struct rc_dev *rc, unsigned int *txbuf, unsigned int n)
++{
++	struct ice40_ir *ir = rc->priv;
++	unsigned int i, len, cycles;
++	u64 total = 0;
++	int ret, retry, emission_ms;
++
++	len = ICE40_IR_HDR_LEN + 2 * n;
++	if (len > ICE40_IR_MAX_BUF)
++		return -EINVAL;
++
++	mutex_lock(&ir->lock);
++
++	if (!ir->configured) {
++		ret = -ENODEV;
++		goto out_unlock;
++	}
++
++	/* buf[0] is the register address */
++	ir->buf[0] = 0x00;
++	ir->buf[1] = len >> 8;
++	ir->buf[2] = len & 0xff;
++	ir->buf[3] = ICE40_IR_OP_SINGLE;
++	ir->buf[4] = ir->carrier >> 8;
++	ir->buf[5] = ir->carrier & 0xff;
++	for (i = 0; i < n; i++) {
++		cycles = DIV_ROUND_CLOSEST_ULL((u64)txbuf[i] * ir->carrier,
++					       1000000);
++		cycles = clamp(cycles, 1U, 0xffffU);
++		total += cycles;
++		ir->buf[6 + 2 * i] = cycles >> 8;
++		ir->buf[7 + 2 * i] = cycles & 0xff;
++	}
++
++	ret = regulator_enable(ir->vled);
++	if (ret)
++		goto out_unlock;
++	ret = ice40_ir_on(ir);
++	if (ret)
++		goto out_vled;
++
++	/* status goes low when the FPGA accepted the packet (checksum ok) */
++	for (retry = 0; retry < 5; retry++) {
++		ret = ice40_i2c_write(ir, ir->buf, len + 1);
++		usleep_range(10000, 12000);
++		if (!ret && !gpiod_get_value_cansleep(ir->ack))
++			break;
++		ret = -EIO;
++	}
++	if (ret) {
++		dev_err(ir->dev, "FPGA did not accept the IR packet\n");
++		goto out_off;
++	}
++
++	emission_ms = div_u64(total * 1000, ir->carrier);
++	if (emission_ms)
++		msleep(emission_ms);
++
++	/* and high again once the emission is finished */
++	for (retry = 0; retry < 7; retry++) {
++		if (gpiod_get_value_cansleep(ir->ack))
++			break;
++		msleep(100);
++	}
++	if (!gpiod_get_value_cansleep(ir->ack))
++		dev_warn(ir->dev, "IR emission did not report completion\n");
++
++	ret = n;
++out_off:
++	ice40_ir_off(ir);
++out_vled:
++	regulator_disable(ir->vled);
++out_unlock:
++	mutex_unlock(&ir->lock);
++
++	return ret;
++}
++
++static int ice40_ir_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	const char *fw_name = "ice40xx/i2c_top_bitmap_2.fw";
++	const struct firmware *fw;
++	struct ice40_ir *ir;
++	u8 id[8];
++	int ret;
++
++	ir = devm_kzalloc(dev, sizeof(*ir), GFP_KERNEL);
++	if (!ir)
++		return -ENOMEM;
++
++	ir->dev = dev;
++	ir->carrier = ICE40_IR_DEFAULT_CARRIER;
++	mutex_init(&ir->lock);
++
++	ir->clk = devm_clk_get(dev, NULL);
++	if (IS_ERR(ir->clk))
++		return dev_err_probe(dev, PTR_ERR(ir->clk), "no clock\n");
++
++	ir->vled = devm_regulator_get(dev, "vled");
++	if (IS_ERR(ir->vled))
++		return dev_err_probe(dev, PTR_ERR(ir->vled), "no vled supply\n");
++
++	ir->scl = devm_gpiod_get(dev, "scl", GPIOD_IN);
++	if (IS_ERR(ir->scl))
++		return dev_err_probe(dev, PTR_ERR(ir->scl), "no scl gpio\n");
++	ir->sda = devm_gpiod_get(dev, "sda", GPIOD_IN);
++	if (IS_ERR(ir->sda))
++		return dev_err_probe(dev, PTR_ERR(ir->sda), "no sda gpio\n");
++	ir->creset = devm_gpiod_get(dev, "creset", GPIOD_OUT_HIGH);
++	if (IS_ERR(ir->creset))
++		return dev_err_probe(dev, PTR_ERR(ir->creset), "no creset gpio\n");
++	ir->enable = devm_gpiod_get(dev, "enable", GPIOD_OUT_LOW);
++	if (IS_ERR(ir->enable))
++		return dev_err_probe(dev, PTR_ERR(ir->enable), "no enable gpio\n");
++	ir->ack = devm_gpiod_get(dev, "ack", GPIOD_IN);
++	if (IS_ERR(ir->ack))
++		return dev_err_probe(dev, PTR_ERR(ir->ack), "no status gpio\n");
++
++	of_property_read_string(dev->of_node, "firmware-name", &fw_name);
++	ret = request_firmware(&fw, fw_name, dev);
++	if (ret)
++		return dev_err_probe(dev, ret, "failed to load %s\n", fw_name);
++	ret = ice40_ir_configure(ir, fw);
++	release_firmware(fw);
++	if (ret)
++		return dev_err_probe(dev, ret, "FPGA configuration failed\n");
++
++	ret = ice40_ir_on(ir);
++	if (ret)
++		return ret;
++	ret = ice40_i2c_read(ir, id, sizeof(id));
++	ice40_ir_off(ir);
++	if (ret)
++		return dev_err_probe(dev, ret, "FPGA does not answer on I2C\n");
++	dev_info(dev, "iCE40 IR configured, id %*ph\n", (int)sizeof(id), id);
++	ir->configured = true;
++
++	ir->rc = devm_rc_allocate_device(dev, RC_DRIVER_IR_RAW_TX);
++	if (!ir->rc)
++		return -ENOMEM;
++
++	ir->rc->priv = ir;
++	ir->rc->driver_name = KBUILD_MODNAME;
++	ir->rc->device_name = "Samsung iCE40 IR transmitter";
++	ir->rc->tx_ir = ice40_ir_tx;
++	ir->rc->s_tx_carrier = ice40_ir_set_carrier;
++
++	platform_set_drvdata(pdev, ir);
++
++	return devm_rc_register_device(dev, ir->rc);
++}
++
++static const struct of_device_id ice40_ir_of_match[] = {
++	{ .compatible = "samsung,klte-ice40-ir" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, ice40_ir_of_match);
++
++static struct platform_driver ice40_ir_driver = {
++	.probe = ice40_ir_probe,
++	.driver = {
++		.name = "ir-ice40-samsung",
++		.of_match_table = ice40_ir_of_match,
++	},
++};
++module_platform_driver(ice40_ir_driver);
++
++MODULE_DESCRIPTION("Samsung Galaxy S5 iCE40 FPGA IR transmitter");
++MODULE_LICENSE("GPL");
+-- 
+2.55.0.windows.5
+

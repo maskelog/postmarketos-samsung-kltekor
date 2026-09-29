@@ -1,0 +1,93 @@
+From da88ea3750fba4e732ae9202695cac26d75e4f78 Mon Sep 17 00:00:00 2001
+From: postmarketOS klte experiment <noreply@localhost>
+Date: Sun, 27 Sep 2026 19:41:33 +0900
+Subject: [PATCH 38/38] ARM: dts: qcom: msm8974pro-samsung-klte: add the iCE40
+ IR transmitter
+
+Describe the IR blaster: iCE40 FPGA on gpio108/109 (bitstream, then
+I2C), ack line on gpio101, 24MHz GP2 clock on gpio58, CRESET_B on
+PMA8084 GPIO11 (S4 powered, 1.8V) and the enable line on expander pin 3.
+The IR LED is supplied from PMA8084 L19. Values from the downstream
+msm8974pro-ac-sec-k-r06..r08 device trees (fw_ver 2 boards).
+---
+ .../dts/qcom/qcom-msm8974pro-samsung-klte.dts | 64 +++++++++++++++++++
+ 1 file changed, 64 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
+index d287b3d..e929a9d 100644
+--- a/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
++++ b/arch/arm/boot/dts/qcom/qcom-msm8974pro-samsung-klte.dts
+@@ -15,6 +15,70 @@
+ 	pins = "gpio120", "gpio121";
+ };
+ 
++/*
++ * IR blaster: an IR LED driven by a Lattice iCE40 FPGA. gpio108/109 carry
++ * the bitstream (SPI) at probe and are the FPGA's I2C bus afterwards,
++ * gpio101 is its ack/busy line, gpio58 feeds it GP2 at 24MHz. CRESET_B is
++ * PMA8084 GPIO11 and must be driven from S4 (1.8V), not VPH.
++ */
++/ {
++	ir-transmitter {
++		compatible = "samsung,klte-ice40-ir";
++
++		clocks = <&gcc GCC_GP2_CLK>;
++		assigned-clocks = <&gcc GP2_CLK_SRC>;
++		assigned-clock-rates = <24000000>;
++
++		vled-supply = <&pma8084_l19>;
++
++		scl-gpios = <&tlmm 108 GPIO_ACTIVE_HIGH>;
++		sda-gpios = <&tlmm 109 GPIO_ACTIVE_HIGH>;
++		ack-gpios = <&tlmm 101 GPIO_ACTIVE_HIGH>;
++		creset-gpios = <&pma8084_gpios 11 GPIO_ACTIVE_HIGH>;
++		enable-gpios = <&gpio_expander 3 GPIO_ACTIVE_LOW>;
++
++		firmware-name = "ice40xx/i2c_top_bitmap_2.fw";
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&ir_clk_pin>, <&ir_bus_pins>, <&ir_ack_pin>,
++			    <&ir_creset_pin>;
++	};
++};
++
++&pma8084_gpios {
++	ir_creset_pin: ir-creset-state {
++		pins = "gpio11";
++		function = "normal";
++		output-high;
++		bias-disable;
++		power-source = <PMA8084_GPIO_S4>;
++		qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
++	};
++};
++
++&tlmm {
++	ir_clk_pin: ir-clk-state {
++		pins = "gpio58";
++		function = "gcc_gp_clk2";
++		drive-strength = <2>;
++		bias-pull-down;
++	};
++
++	ir_bus_pins: ir-bus-state {
++		pins = "gpio108", "gpio109";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	ir_ack_pin: ir-ack-state {
++		pins = "gpio101";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++};
++
+ /*
+  * Krait OPPs above the 960MHz the bootloader leaves the cores at, without
+  * touching the CPU rail. Nothing in this kernel drives VDD_APC (PMA8084 S8
+-- 
+2.55.0.windows.5
+

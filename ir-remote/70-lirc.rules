@@ -1,0 +1,2 @@
+# Let the phone user drive the IR blaster (/dev/lirc0) without root.
+SUBSYSTEM=="lirc", GROUP="plugdev", MODE="0660"
